@@ -9,6 +9,7 @@ export class NodesOverview extends K8sPage {
     static templateUrl = 'components/nodes-overview/nodes-overview.html';
     version: number;
     serverInfo: any = null;
+    hideAllWarningPods: boolean = true;
 
     constructor(
         $scope,
@@ -28,12 +29,9 @@ export class NodesOverview extends K8sPage {
         this.__prepareDS().then(() => {
             this.getEvents();
             this.getNodeMap()
-                .then(async () => {
+                .then(() => {
                     if (this.nodesMap.length > 0 && this.serverInfo === null) {
-                        this.serverInfo = {};
-                        for (const node of this.nodesMap) {
-                            this.serverInfo[node.name] = await this.__getServerInfo(node.hostIp);
-                        }
+                        this.getServerInfo();
                     }
                     this.pageReady = true;
                 })
@@ -41,7 +39,15 @@ export class NodesOverview extends K8sPage {
                     this.getResourcesMetrics().then(() => {})
                 });
         });
+    }
 
+    getServerInfo() {
+        this.serverInfo = {};
+        for (const node of this.nodesMap) {
+            this.__getServerInfo(node.hostIp, node.name).then(res => {
+                this.serverInfo[node.name] = res;
+            })
+        }
     }
 
     showAllPodsNS(ns) {
@@ -80,15 +86,18 @@ export class NodesOverview extends K8sPage {
             }, 0)
         }
 
-
         switch (metric) {
             case "cpuUsed":
                 return __convertToMicro(res.toFixed(3));
             case "cpuRequested":
                 return __convertToMicro(__roundCpu(res));
+            case "cpuLimit":
+                return __convertToMicro(__roundCpu(res));
             case "memoryUsed":
                 return __convertToGB(res);
             case "memoryRequested":
+                return __convertToGB(res);
+            case "memoryLimit":
                 return __convertToGB(res);
             default:
                 return 'N-A'
@@ -147,5 +156,9 @@ export class NodesOverview extends K8sPage {
             }
         }
         return '<i class="fa fa-long-arrow-up grey"></i>'
+    }
+
+    toggleAllWarningPods(){
+        this.hideAllWarningPods = !this.hideAllWarningPods;
     }
 }

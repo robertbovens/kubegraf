@@ -1,24 +1,24 @@
 ///<reference path="../../node_modules/grafana-sdk-mocks/app/headers/common.d.ts" />
 import appEvents from "grafana/app/core/app_events";
 
-import {Pod} from "../common/types/pod";
-import angular from "angular";
-import {PrometheusProxy} from "../common/proxies/prometheusProxy";
-import {ERROR, PODS_LIMIT, TERMINATING, WARNING} from "../common/constants";
-import {Component} from "../common/types/component";
-import {Service} from "../common/types/service";
-import {Job} from "../common/types/job";
-import {Cronjob} from "../common/types/cronjob";
-import {Namespace} from "../common/types/namespace";
+import { Pod } from "../common/types/pod";
+import { PrometheusProxy } from "../common/proxies/prometheusProxy";
+import { ERROR, PODS_LIMIT, SUCCEEDED, SUCCESS, TERMINATING, WARNING } from "../common/constants";
+import { Component } from "../common/types/component";
+import { Service } from "../common/types/service";
+import { Job } from "../common/types/job";
+import { Cronjob } from "../common/types/cronjob";
+import { Namespace } from "../common/types/namespace";
 import store from "../common/store";
-import {Deployment} from "../common/types/deployment";
-import {Statefulset} from "../common/types/statefulset";
-import {Daemonset} from "../common/types/daemonset";
-import {Node} from "../common/types/node";
-import {__convertToGB, __convertToMicro, __convertToHours, __roundCpu} from "../common/helpers";
-import {BaseModel} from '../common/types/traits/baseModel';
+import { Deployment } from "../common/types/deployment";
+import { Statefulset } from "../common/types/statefulset";
+import { Daemonset } from "../common/types/daemonset";
+import { Node } from "../common/types/node";
+import { __convertToGB, __convertToHours, __convertToMicro, __roundCpu } from "../common/helpers";
 
 const REFRESH_RATE_DEFAULT = 60000;
+const ERROR_MSG_MEMORY_REQUESTS_LIMITS = 'Memory limits and requests not configured'
+const ERROR_MSG_CPU_REQUESTS_LIMITS = 'CPU limits and requests not configured'
 
 export  class K8sPage {
     pageReady: boolean;
@@ -88,58 +88,42 @@ export  class K8sPage {
         document.title = 'DevOpsProdigy KubeGraf';
     }
 
-    async __getServerInfo(nodeIp: string) {
-        let job = "kubernetes-service-endpoints";
-        let instance = `${nodeIp}:.+`;
-
-        const nodeInfo = await this.prometheusDS.query({
-            expr: `node_uname_info{instance=~"${nodeIp}:.+"}`,
-            legend: 'job'
-        });
-
-        if(nodeInfo[0] && nodeInfo[0].target){
-            const jobMatch = nodeInfo[0].target.match(/job="(.+?)"/);
-            if (jobMatch[1]) {
-                job = jobMatch[1];
-            }
-            const instanceMatch = nodeInfo[0].target.match(/instance="(.+?)"/);
-            if (instanceMatch[1]) {
-                instance = instanceMatch[1];
-            }
-        }
-
-        const cpuCores = await this.prometheusDS.query({
-            expr: `count(count(node_cpu_seconds_total{instance=~"${instance}",job=~"${job}"}) by (cpu))`,
-            legend: 'instance'
-        });
-        const ramTotal = await this.prometheusDS.query({
-            expr: `node_memory_MemTotal_bytes{instance=~"${instance}",job=~"${job}"}`,
-            legend: 'instance'
-        });
-        const swapTotal = await this.prometheusDS.query({
-            expr: `node_memory_SwapTotal_bytes{instance=~"${instance}",job=~"${job}"}`,
-            legend: 'instance'
-        });
-        const rootFSTotal = await this.prometheusDS.query({
-            expr: `node_filesystem_size_bytes{instance=~"${instance}",job=~"${job}",mountpoint="/",fstype!="rootfs"}`,
-            legend: 'instance'
-        });
-        const sysLoad = await this.prometheusDS.query({
-            expr: `node_load1{instance=~"${instance}",job=~"${job}"}`,
-            legend: 'instance'
-        });
-        const uptime = await this.prometheusDS.query({
-            expr: `node_time_seconds{instance=~"${instance}",job=~"${job}"} - node_boot_time_seconds{instance=~"${instance}",job=~"${job}"}`,
-            legend: 'instance'
-        });
+    async __getServerInfo(nodeIp: string, nodeName: string) {
+        let instance = `${nodeName}|${nodeIp}:.+`;
+        const result = await Promise.all([
+            this.prometheusDS.query({
+                expr: `count(count(node_cpu_seconds_total{instance=~"${instance}"}) by (cpu, instance)) by (instance)`,
+                legend: 'instance'
+            }, false), //cpuCores
+            this.prometheusDS.query({
+                expr: `sum(node_memory_MemTotal_bytes{instance=~"${instance}"}) by (instance)`,
+                legend: 'instance'
+            }, false), //ramTotal
+            this.prometheusDS.query({
+                expr: `sum(node_memory_SwapTotal_bytes{instance=~"${instance}"}) by (instance)`,
+                legend: 'instance'
+            }, false), //swapTotal
+            this.prometheusDS.query({
+                expr: `sum(node_filesystem_size_bytes{instance=~"${instance}",mountpoint="/",fstype!="rootfs"}) by (instance)`,
+                legend: 'instance'
+            },false), //rootFSTotal
+            this.prometheusDS.query({
+                expr: `sum(node_load1{instance=~"${instance}"}) by (instance)`,
+                legend: 'instance'
+            }, false), //sysLoad
+            this.prometheusDS.query({
+                expr: `sum(node_time_seconds{instance=~"${instance}"} - node_boot_time_seconds{instance=~"${instance}"}) by (instance)`,
+                legend: 'instance'
+            }, false) //uptime
+        ])
 
         return {
-            cpuCores: cpuCores[0] && cpuCores[0].datapoint,
-            ramTotal: ramTotal[0] && __convertToGB(ramTotal[0].datapoint),
-            swapTotal: swapTotal[0] && __convertToGB(swapTotal[0].datapoint),
-            rootFSTotal: rootFSTotal[0] && __convertToGB(rootFSTotal[0].datapoint),
-            sysLoad: sysLoad[0] && sysLoad[0].datapoint,
-            uptime: uptime[0] && __convertToHours(uptime[0].datapoint * 1000)
+            cpuCores: result[0][0] && result[0][0].datapoint,
+            ramTotal: result[1][0] && __convertToGB(result[1][0].datapoint),
+            swapTotal: result[2][0] && __convertToGB(result[2][0].datapoint),
+            rootFSTotal: result[3][0] && __convertToGB(result[3][0].datapoint),
+            sysLoad: result[4][0] && result[4][0].datapoint,
+            uptime: result[5][0] && __convertToHours(result[5][0].datapoint * 1000)
         }
     }
 
@@ -195,11 +179,13 @@ export  class K8sPage {
         _promises.push(this.__getPodsCountMetrics());
         _promises.push(this.__getCpuMetricsUsed());
         _promises.push(this.__getMemoryMetricsUsed());
+        _promises.push(this.__getCpuLimitMetrics());
+        _promises.push(this.__getMemoryLimitMetrics());
 
         return this.$q.all(_promises)
             .then((results) => {
                 this.nodesMap.forEach(node => {
-                    node.parseMetrics(results[0], results[1], results[2], results[3], results[4]);
+                    node.parseMetrics(results[0], results[1], results[2], results[3], results[4], results[5], results[6]);
                 });
 
                 this.timeout(() => {
@@ -211,29 +197,49 @@ export  class K8sPage {
     __getCpuMetricsUsed(){
         const promQuery = {
             expr: 'sum(rate(container_cpu_usage_seconds_total{id="/"}[2m])) by (instance)',
-            legend: 'node'
+            legend: 'instance'
         }
-        return this.prometheusDS.query(promQuery)
+        return this.prometheusDS.query(promQuery, false)
             .then(res => res)
     }
 
     __getCpuMetricsRequested(){
         const promQuery = {
-            expr: 'sum(kube_pod_container_resource_requests_cpu_cores) by (node)',
+            expr: 'sum(sum(kube_pod_container_resource_requests_cpu_cores) by (namespace, pod, node) * on (pod, namespace) group_left()  (sum(kube_pod_status_phase{phase="Running"}) by (pod, namespace) == 1)) by (node)',
             legend: 'node'
         };
 
-        return this.prometheusDS.query(promQuery)
+        return this.prometheusDS.query(promQuery, false)
+            .then(res => res);
+    }
+
+    __getCpuLimitMetrics(){
+        const promQuery = {
+            expr: 'sum(sum(kube_pod_container_resource_limits_cpu_cores) by (namespace, pod, node) * on (pod, namespace) group_left()  (sum(kube_pod_status_phase{phase="Running"}) by (pod, namespace) == 1)) by (node)',
+            legend: 'node'
+        };
+
+        return this.prometheusDS.query(promQuery, false)
             .then(res => res);
     }
 
     __getMemoryMetricsRequested(){
         const promQuery = {
-            expr: 'sum(kube_pod_container_resource_requests_memory_bytes) by (node)',
+            expr: 'sum(sum(kube_pod_container_resource_requests_memory_bytes) by (namespace, pod, node) * on (pod, namespace) group_left()  (sum(kube_pod_status_phase{phase="Running"}) by (pod, namespace) == 1)) by (node)',
             legend: "node"
         };
 
-        return this.prometheusDS.query(promQuery)
+        return this.prometheusDS.query(promQuery, false)
+            .then(res => res);
+    }
+
+    __getMemoryLimitMetrics(){
+        const promQuery = {
+            expr: 'sum(sum(kube_pod_container_resource_limits_memory_bytes) by (namespace, pod, node) * on (pod, namespace) group_left()  (sum(kube_pod_status_phase{phase="Running"}) by (pod, namespace) == 1)) by (node)',
+            legend: "node"
+        };
+
+        return this.prometheusDS.query(promQuery, false)
             .then(res => res);
     }
 
@@ -242,18 +248,17 @@ export  class K8sPage {
             expr: 'sum(node_memory_MemTotal_bytes) by (instance) - sum(node_memory_MemFree_bytes) by (instance) - sum(node_memory_Buffers_bytes) by (instance) - sum(node_memory_Cached_bytes) by (instance) ',
             legend: 'instance'
         };
-
-        return this.prometheusDS.query(promQuery)
+        return this.prometheusDS.query(promQuery, false)
             .then(res => res);
     }
 
     __getPodsCountMetrics(){
         const promQuery = {
             expr: 'sum(kubelet_running_pod_count) by (instance)',
-            legend: 'node'
+            legend: 'instance'
         };
 
-        return this.prometheusDS.query(promQuery)
+        return this.prometheusDS.query(promQuery, false)
             .then(res => res);
     }
 
@@ -293,17 +298,20 @@ export  class K8sPage {
         _promises.push(this.__getPodsUsedMemory());
         _promises.push(this.__getPodsRequestedCpu());
         _promises.push(this.__getPodsRequestedMemory());
-
+        _promises.push(this.__getPodsLimitCpu());
+        _promises.push(this.__getPodsLimitMemory());
 
         this.$q.all(_promises)
             .then(results => {
                 this.nodesMap.forEach(node => {
                     node.namespaces.map(namespace => {
                         namespace.pods.map(pod => {
-                            let cpu = results[0].find(item => item.target === pod.name);
-                            let mem = results[1].find(item => item.target === pod.name);
-                            let cpuReq = results[2].find(item => item.target === pod.name);
-                            let memReq = results[3].find(item => item.target === pod.name);
+                            const cpu = results[0].find(item => item.target === pod.name);
+                            const mem = results[1].find(item => item.target === pod.name);
+                            const cpuReq = results[2].find(item => item.target === pod.name);
+                            const memReq = results[3].find(item => item.target === pod.name);
+                            const cpuLimit = results[4].find(item => item.target === pod.name);
+                            const memLimit = results[5].find(item => item.target === pod.name);
 
                             if (cpu !== undefined) {
                                 pod.sourceMetrics.cpuUsed = cpu.datapoint;
@@ -313,13 +321,21 @@ export  class K8sPage {
                                 pod.sourceMetrics.memoryUsed = mem.datapoint;
                                 pod.metrics.memoryUsed = __convertToGB(mem.datapoint);
                             }
-                            if(cpuReq !== undefined){
+                            if (cpuReq !== undefined) {
                                 pod.sourceMetrics.cpuRequested = cpuReq.datapoint;
                                 pod.metrics.cpuRequested = __convertToMicro(__roundCpu(cpuReq.datapoint));
                             }
-                            if(memReq !== undefined){
+                            if (memReq !== undefined) {
                                 pod.sourceMetrics.memoryRequested = memReq.datapoint;
                                 pod.metrics.memoryRequested = __convertToGB(memReq.datapoint);
+                            }
+                            if (cpuLimit !== undefined) {
+                                pod.sourceMetrics.cpuLimit = cpuLimit.datapoint;
+                                pod.metrics.cpuLimit = __convertToMicro(__roundCpu(cpuLimit.datapoint));
+                            }
+                            if (memLimit !== undefined) {
+                                pod.sourceMetrics.memoryLimit = memLimit.datapoint;
+                                pod.metrics.memoryLimit = __convertToGB(memLimit.datapoint);
                             }
                         });
                     });
@@ -340,7 +356,7 @@ export  class K8sPage {
             legend: 'pod'
         };
 
-        return this.prometheusDS.query(podsUsedCpu)
+        return this.prometheusDS.query(podsUsedCpu, false)
             .then(res => res);
     }
 
@@ -352,7 +368,7 @@ export  class K8sPage {
             legend: 'pod'
         };
 
-        return this.prometheusDS.query(podsUsedMemory)
+        return this.prometheusDS.query(podsUsedMemory, false)
             .then(res => res);
     }
 
@@ -362,7 +378,17 @@ export  class K8sPage {
             legend: 'pod'
         };
 
-        return this.prometheusDS.query(podsUsedCpu)
+        return this.prometheusDS.query(podsUsedCpu, false)
+            .then(res => res);
+    }
+
+    __getPodsLimitCpu(){
+        const podsLimitCpu = {
+            expr: 'sum(kube_pod_container_resource_limits_cpu_cores) by (pod)',
+            legend: 'pod'
+        };
+
+        return this.prometheusDS.query(podsLimitCpu, false)
             .then(res => res);
     }
 
@@ -372,7 +398,17 @@ export  class K8sPage {
             legend: 'pod'
         };
 
-        return this.prometheusDS.query(podsUsedMemory)
+        return this.prometheusDS.query(podsUsedMemory, false)
+            .then(res => res);
+    }
+
+    __getPodsLimitMemory(){
+        const podsLimitMemory = {
+            expr: 'sum(kube_pod_container_resource_limits_memory_bytes) by (pod)',
+            legend: 'pod'
+        };
+
+        return this.prometheusDS.query(podsLimitMemory, false)
             .then(res => res);
     }
 
@@ -784,11 +820,11 @@ export  class K8sPage {
             .then(ds => {
                 this.cluster = ds;
                 this.__setRefreshRate(this.cluster.refreshRate);
-                this.getPrometheusDS(this.cluster.prometheus)
+                return this.getPrometheusDS(this.cluster.prometheus)
                     .then(() => {
                         this.pageReady = true;
                     })
-            })
+            });
     }
 
     getPrometheusDS(name){
@@ -974,7 +1010,18 @@ export  class K8sPage {
                 }
             })
         }
-        return warningPods
+
+        return this.sortByStatus(warningPods)
+    }
+
+    sortByStatus(array: {status: number}[], rule = [ERROR, WARNING, SUCCESS, SUCCEEDED, TERMINATING]): any[] {
+        const sorted = []
+
+        rule.forEach(status => {
+            sorted.push(...array.filter(pod => pod.status === status))
+        })
+
+        return sorted
     }
 
     getWarningNodes(){
@@ -1017,8 +1064,45 @@ export  class K8sPage {
         });
     }
 
-    podIsWarning(pod: Pod) {
-        return !pod.is_deleted && (pod.status === WARNING || pod.status === ERROR || pod.status === TERMINATING)
+    podIsWarning(pod: Pod): boolean {
+        if (!pod.is_deleted) {
+            if (pod.status === WARNING || pod.status === ERROR || pod.status === TERMINATING) {
+                return true
+            }
+            return !this.validResources(pod)
+        }
+        return false
+    }
+
+    validResources(pod: Pod): boolean {
+        return pod.data.spec.containers.every(container => {
+            const msgCpu = []
+            const msgMemory = []
+
+            if (pod.data.metadata.namespace !== 'kube-system' && pod.status !== SUCCEEDED) {
+                if (!container.resources.requests || !container.resources.requests.cpu) {
+                    msgCpu.push('CPU request')
+                }
+                if (!container.resources.limits || !container.resources.limits.cpu){
+                    msgCpu.push('CPU limit')
+                }
+                if (!container.resources.requests || !container.resources.requests.memory) {
+                    msgMemory.push('Memory request')
+                }
+                if (!container.resources.limits || !container.resources.limits.memory) {
+                    msgMemory.push('Memory limit')
+                }
+            }
+
+            if(msgCpu.length > 0 || msgMemory.length > 0){
+                pod.message = `Container "${container.name}":
+                 ${msgCpu.length && 'Specify ' + msgCpu.join(' and ') + ';'}
+                 ${msgMemory.length && 'Specify ' + msgMemory.join(' and ') + ';'}`;
+                return false
+            }
+
+            return true
+        })
     }
 
     toggleMenu() {

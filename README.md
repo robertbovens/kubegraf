@@ -45,7 +45,7 @@ The plugin consists of three main info pages with detailed information about the
 - Information about used and allocated resources (RAM, CPU utilization) and the number of pods;
 - Physical distribution of pods.
 
-![](https://devopsprodigy.com/img/dop-kubegraf/v140/n_node_overview.png)
+![](https://devopsprodigy.com/img/dop-kubegraf/v150/n5_node_overview.png)
 
 *Pic. 3: Nodes overview*
 
@@ -65,7 +65,7 @@ This is a dashboard with node metrics. It displays the employment of resources l
 
 Displays how much of the resources the selected pod has used.
 
-![](https://devopsprodigy.com/img/dop-kubegraf/v120/pods_dashboard.png)
+![](https://devopsprodigy.com/img/dop-kubegraf/v150/n5_pods_dashboard.png)
 
 *Pic. 5: Pod resources*
 
@@ -74,7 +74,7 @@ Displays how much of the resources the selected pod has used.
 ![](https://devopsprodigy.com/img/dop-kubegraf/v120/deployments_dashboard_1.png)
 
 *Pic. 6: Deployment dashboard*
-![](https://devopsprodigy.com/img/dop-kubegraf/v120/deployments_dashboard_2.png)
+![](https://devopsprodigy.com/img/dop-kubegraf/v150/n5_deployments_dashboard_2.png)
 
 *Pic. 7: Deployment dashboard*
 
@@ -92,15 +92,16 @@ The above three dashboards show the number of available / unavailable applicatio
 
 2. Copy the repository:
 
-	`git clone https://github.com/devopsprodigy/kubegraf  /var/lib/grafana/plugins` and restart grafana-server
+	`git clone https://github.com/devopsprodigy/kubegraf  /var/lib/grafana/plugins/devopsprodigy-kubegraf-app` and restart grafana-server
 
 	or
 
 	`grafana-cli plugins install devopsprodigy-kubegraf-app` and restart grafana-server.
 
-3. Apply Kubernetes manifests from [kubernetes/](kubernetes/) directory to give
+3. Create namespace "kubegraf" and apply Kubernetes manifests from [kubernetes/](https://github.com/devopsprodigy/kubegraf/tree/master/kubernetes) directory to give
      required permissions to the user `grafana-kubegraf`:
       ```
+      kubectl create ns kubegraf
       kubectl apply -f https://raw.githubusercontent.com/devopsprodigy/kubegraf/master/kubernetes/serviceaccount.yaml
       kubectl apply -f https://raw.githubusercontent.com/devopsprodigy/kubegraf/master/kubernetes/clusterrole.yaml
       kubectl apply -f https://raw.githubusercontent.com/devopsprodigy/kubegraf/master/kubernetes/clusterrolebinding.yaml
@@ -120,7 +121,7 @@ The above three dashboards show the number of available / unavailable applicatio
 
     Get the token
     ```
-    kubectl get secret grafana-kubegraf-secret -o jsonpath={.data.token} | base64 -d
+    kubectl get secret grafana-kubegraf-secret -o jsonpath={.data.token} -n kubegraf | base64 -d
     ```
 
 5. Go to /configuration-plugins in Grafana and click on the plugin. Then click “enable”.

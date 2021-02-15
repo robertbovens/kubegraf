@@ -2,18 +2,23 @@
   "type": "app",
   "name": "DevOpsProdigy KubeGraf",
   "id"  : "devopsprodigy-kubegraf-app",
-
+  "dependencies": {
+    "grafanaDependency": ">=6.0.0",
+    "plugins": [
+      {
+        "name": "Pie Chart",
+        "id": "grafana-piechart-panel",
+        "type" : "panel",
+        "version": ">=1.3.7"
+      }
+    ]
+  },
   "info"  : {
     "description" : "An updated version of the Grafana App for Kubernetes plugin, this plugin allows you to visualize and analyze your Kubernetes cluster’s performance. It demonstrates in graphics the main service metrics and characteristics of the Kubernetes cluster. It also makes it easier to examine the application’s life cycle and error logs.",
     "author"      : {
       "name"  : "DevOpsProdigy",
-      "url"   : "https://devopsprodigy.com/"
-    },
-    "dependencies": {
-      "grafanaVersion": "5.0+",
-      "plugins": [
-        "grafana-piechart-panel"
-      ]
+      "url"   : "https://devopsprodigy.com/",
+      "email" : "develop@devopsprodigy.com"
     },
     "keywords"  : ["DevOpsProdigy", "kubernetes", "monitoring", "prometheus"],
     "logos": {
@@ -31,19 +36,19 @@
     ],
     "screenshots": [
       {"name": "Deployments dashboard", "path": "img/deployments_dashboard_1.png"},
-      {"name": "Deployments dashboard", "path": "img/deployments_dashboard_2.png"},
-      {"name": "Pod resources dashboard", "path": "img/pods_dashboard.png"},
+      {"name": "Deployments dashboard", "path": "img/n5_deployments_dashboard_2.png"},
+      {"name": "Pod resources dashboard", "path": "img/n5_pods_dashboard.png"},
       {"name": "Node dashboard", "path": "img/n_node_dashboard_1.png"},
       {"name": "Node dashboard", "path": "img/n_node_dashboard_2.png"},
-      {"name": "Nodes overview", "path": "img/n_node_overview.png"},
+      {"name": "Nodes overview", "path": "img/n5_node_overview.png"},
       {"name": "Application overview", "path": "img/n_applications_overview_1.png"},
       {"name": "Application overview", "path": "img/n_applications_overview_2.png"},
       {"name": "Application overview", "path": "img/n_applications_overview_3.png"},
       {"name": "Cluster status", "path": "img/cluster_status_1.png"},
       {"name": "Cluster status", "path": "img/cluster_status_2.png"}
     ],
-    "version": "1.4.0",
-    "updated" : "2020-05-13"
+    "version": "1.5.0",
+    "updated" : "2020-12-16"
   },
 
   "includes"  : [
